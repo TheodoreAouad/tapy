@@ -18,13 +18,15 @@ class Element:
             raise ValueError("choose either xy coords botleft or mean.")
 
         self.shape = shape
+        self.xy_coords_botleft = None
 
         if xy_coords_botleft is not None:
             self.set_xy_coords_botleft(xy_coords_botleft)
         if xy_coords_mean is not None:
             self.set_xy_coords_mean(xy_coords_mean)
 
-
+    def translate(self, vector: np.ndarray):
+        self.set_xy_coords_botleft(self.xy_coords_botleft + vector)
 
     @property
     def xy_coords_mean(self):
@@ -84,17 +86,25 @@ class Element:
 
 class ElementImage(Element):
 
-    def __init__(self, image: np.ndarray, *args, **kwargs):
+    def __init__(self, image: np.ndarray, new_shape=None, imshow_kwargs={}, *args, **kwargs):
         super().__init__(shape=np.array(image.shape), *args, **kwargs)
         self.image = image
+        self.imshow_kwargs = imshow_kwargs
+
+        if new_shape is not None:
+            self.resize(new_shape)
+
 
     @property
     def img(self):
         return self.image
 
-    def add_to_canva(self, canva: "Canva", new_shape=None, coords=None, coords_type="barycentre", imshow_kwargs={}):
+    def add_to_canva(self, canva: "Canva", new_shape=None, coords=None, coords_type="barycentre", imshow_kwargs=None):
         if new_shape is not None:
             self.resize(new_shape)
+
+        if imshow_kwargs is None:
+            imshow_kwargs = self.imshow_kwargs
 
         if coords is not None:
             if coords_type == "barycentre":
@@ -141,7 +151,8 @@ class ElementArrow(Element):
         elt2: Element,
         link1="adapt",
         link2="adapt",
-        length_includes_head=True, width=.1, **kwargs):
+        length_includes_head=True, width=.1, **kwargs
+    ):
         if link1 == "adapt" or link2 == "adapt":
             link1, link2 = ElementArrow.adapt_link(elt1, elt2, link1, link2)
 
@@ -191,6 +202,49 @@ class ElementArrow(Element):
                 link2 = "midbot"
 
         return link1, link2
+
+
+class ElementGrouper(Element):
+
+    def __init__(self, elements=dict(), *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.elements = dict()
+        for key, element in elements.items():
+            self.add_element(element, key=key)
+        self.xy_coords_botleft = np.array([0, 0])  # TODO: adapt this to the elements
+        self.shape = np.array([0, 0])  # TODO: adapt this to the elements
+
+    def translate_group(self, vector: np.ndarray):
+        # self.translate(vector)
+        for element in self.elements.values():
+            element.translate(vector)
+
+    def add_element(self, element: Element, key=None):
+        if key is None:
+            key = 0
+            while key in self.elements.keys():
+                key = np.random.randint(0, 9999999)
+
+        self.elements[key] = element
+
+    def add_to_canva(self, canva: "Canva"):
+        for key, element in self.elements.items():
+            if element in canva.elements.values():
+                continue
+
+            if key in canva.elements.keys():
+                idx = 0
+                while f'{key}_{idx}' in canva.elements.keys():
+                    idx += 1
+                canva.add_element(element, key=f'{key}_{idx}')
+            else:
+                canva.add_element(element, key=key)
+
+            canva.add_element(element, key)
+
+    def __len__(self):
+        return len(self.elements)
+
 
 
 class Canva:
